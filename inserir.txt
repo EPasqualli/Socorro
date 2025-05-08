@@ -1,0 +1,179 @@
+int inserir_membros(const char *arquivo, char **membros, int num_membros, int comprimir) {
+    diretorio_vinac_t *dir;
+
+    if (arquivo_existe(arquivo)) {
+        dir = carregar_diretorio(arquivo);
+        if (!dir) {
+            printf("Erro ao carregar diretório de %s\n", arquivo);
+            return 1;
+        }
+    } else {
+        dir = criar_diretorio();
+        if (!dir) {
+            printf("Erro ao criar diretório para %s\n", arquivo);
+            return 1;
+        }
+    }
+    
+    FILE *arquivo_vinac = fopen(arquivo, "r+b");
+    if (!arquivo_vinac) {
+        arquivo_vinac = fopen(arquivo, "wb");
+        if (!arquivo_vinac) {
+            printf("Erro ao abrir o arquivo %s\n", arquivo);
+            liberar_diretorio(dir);
+            return 1;
+        }
+        
+        // Escrever o cabeçalho inicial
+        if (fwrite(&dir->cabecalho, sizeof(cabecalho_vinac_t), 1, arquivo_vinac) != 1) {
+            printf("Erro ao escrever cabeçalho\n");
+            fclose(arquivo_vinac);
+            liberar_diretorio(dir);
+            return 1;
+        }
+    }
+    
+    // Ir para o final do arquivo para adicionar os novos membros
+    fseek(arquivo_vinac, 0, SEEK_END);
+    
+    for (int i = 0; i < num_membros; i++) {
+        struct stat info_arquivo;
+        if (stat(membros[i], &info_arquivo) != 0) {
+            printf("Erro ao obter informações do arquivo %s\n", membros[i]);
+            continue;
+        }
+        
+        FILE *arquivo_membro = fopen(membros[i], "rb");
+        if (!arquivo_membro) {
+            printf("Erro ao abrir o arquivo membro %s\n", membros[i]);
+            continue;
+        }
+        
+        // Preparar a nova entrada
+        entrada_vinac_t nova_entrada;
+        strncpy(nova_entrada.nome, membros[i], 1023);
+        nova_entrada.nome[1023] = '\0';
+        nova_entrada.uid = obter_proximo_uid();
+        nova_entrada.tamanho_orig = info_arquivo.st_size;
+        nova_entrada.data_mod = info_arquivo.st_mtime;
+        nova_entrada.offset = ftell(arquivo_vinac);
+        nova_entrada.comprimido = comprimir;
+        
+        // Verificar se o membro já existe e ajustar a ordem
+        entrada_vinac_t *entrada_existente = encontrar_entrada(dir, nova_entrada.nome);
+        if (entrada_existente) {
+            nova_entrada.ordem = entrada_existente->ordem;
+        } else {
+            nova_entrada.ordem = dir->cabecalho.num_membros;
+        }
+        
+        // Definir o tamanho em disco dependendo da compressão
+        if (comprimir) {
+            // Ler o arquivo para um buffer
+            unsigned char *buffer_entrada = (unsigned char *)malloc(info_arquivo.st_size);
+            if (!buffer_entrada) {
+                printf("Erro ao alocar memória para comprimir %s\n", membros[i]);
+                fclose(arquivo_membro);
+                continue;
+            }
+            
+            if (fread(buffer_entrada, 1, info_arquivo.st_size, arquivo_membro) != info_arquivo.st_size) {
+                printf("Erro ao ler arquivo %s para compressão\n", membros[i]);
+                free(buffer_entrada);
+                fclose(arquivo_membro);
+                continue;
+            }
+            
+            // Alocar buffer para dados comprimidos (pior caso: 257/256 * tamanho + 1)
+            unsigned int tamanho_buffer_comp = (info_arquivo.st_size * 257) / 256 + 1;
+            unsigned char *buffer_comprimido = (unsigned char *)malloc(tamanho_buffer_comp);
+            if (!buffer_comprimido) {
+                printf("Erro ao alocar memória para buffer comprimido\n");
+                free(buffer_entrada);
+                fclose(arquivo_membro);
+                continue;
+            }
+            
+            // Comprimir os dados
+            unsigned int tamanho_comprimido = LZ_Compress(buffer_entrada, buffer_comprimido, info_arquivo.st_size);
+            
+            // Verificar se vale a pena usar a compressão
+            if (tamanho_comprimido < info_arquivo.st_size) {
+                // Escrever dados comprimidos
+                if (fwrite(buffer_comprimido, 1, tamanho_comprimido, arquivo_vinac) != tamanho_comprimido) {
+                    printf("Erro ao escrever dados comprimidos\n");
+                    free(buffer_entrada);
+                    free(buffer_comprimido);
+                    fclose(arquivo_membro);
+                    continue;
+                }
+                nova_entrada.tamanho_disco = tamanho_comprimido;
+                nova_entrada.comprimido = 1;
+            } else {
+                // Escrever dados não comprimidos
+                fseek(arquivo_membro, 0, SEEK_SET);
+                unsigned char buffer[TAMANHO_BUFFER];
+                size_t bytes_lidos;
+                nova_entrada.tamanho_disco = info_arquivo.st_size;
+                nova_entrada.comprimido = 0;
+                
+                while ((bytes_lidos = fread(buffer, 1, TAMANHO_BUFFER, arquivo_membro)) > 0) {
+                    if (fwrite(buffer, 1, bytes_lidos, arquivo_vinac) != bytes_lidos) {
+                        printf("Erro ao escrever dados não comprimidos\n");
+                        break;
+                    }
+                }
+            }
+            
+            free(buffer_entrada);
+            free(buffer_comprimido);
+        } else {
+            // Copiar dados sem compressão
+            unsigned char buffer[TAMANHO_BUFFER];
+            size_t bytes_lidos;
+            nova_entrada.tamanho_disco = info_arquivo.st_size;
+            nova_entrada.comprimido = 0;
+            
+            while ((bytes_lidos = fread(buffer, 1, TAMANHO_BUFFER, arquivo_membro)) > 0) {
+                if (fwrite(buffer, 1, bytes_lidos, arquivo_vinac) != bytes_lidos) {
+                    printf("Erro ao escrever dados não comprimidos\n");
+                    break;
+                }
+            }
+        }
+        
+        fclose(arquivo_membro);
+        
+        // Adicionar a entrada ao diretório
+        if (!adicionar_entrada(dir, &nova_entrada)) {
+            printf("Erro ao adicionar entrada para %s\n", membros[i]);
+        } else {
+            printf("Arquivo %s adicionado com sucesso\n", membros[i]);
+        }
+    }
+    
+    // Atualizar o diretório no arquivo
+    long posicao_dir = ftell(arquivo_vinac);
+    dir->cabecalho.offset_dir = posicao_dir;
+    
+    // Escrever todas as entradas
+    if (fwrite(dir->entradas, sizeof(entrada_vinac_t), dir->cabecalho.num_membros, arquivo_vinac) != dir->cabecalho.num_membros) {
+        printf("Erro ao escrever diretório\n");
+        fclose(arquivo_vinac);
+        liberar_diretorio(dir);
+        return 1;
+    }
+    
+    // Atualizar o cabeçalho
+    fseek(arquivo_vinac, 0, SEEK_SET);
+    if (fwrite(&dir->cabecalho, sizeof(cabecalho_vinac_t), 1, arquivo_vinac) != 1) {
+        printf("Erro ao atualizar cabeçalho\n");
+        fclose(arquivo_vinac);
+        liberar_diretorio(dir);
+        return 1;
+    }
+    
+    fclose(arquivo_vinac);
+    liberar_diretorio(dir);
+    return 0;
+}

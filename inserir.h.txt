@@ -1,0 +1,52 @@
+/* operacoes.h - Definições das operações do arquivador VINAc */
+#ifndef OPERACOES_H
+#define OPERACOES_H
+
+/* Cabeçalho do arquivo */
+typedef struct {
+    char magico[6];         // "VINAC\0"
+    uint8_t versao;         // Versão do formato
+    uint32_t num_membros;   // Número de membros
+    uint64_t offset_dir;    // Offset para área de diretório
+} cabecalho_vinac_t;
+
+/* Entrada do diretório para cada membro */
+typedef struct {
+    char nome[1024];        // Nome do arquivo
+    uint32_t uid;           // UID
+    uint64_t tamanho_orig;  // Tamanho original
+    uint64_t tamanho_disco; // Tamanho em disco
+    time_t data_mod;        // Data de modificação
+    uint32_t ordem;         // Ordem no arquivo
+    uint64_t offset;        // Offset para os dados
+    uint8_t comprimido;     // Flag de compressão
+} entrada_vinac_t;
+
+/* Estrutura para manter o diretório em memória */
+typedef struct {
+    cabecalho_vinac_t cabecalho;
+    entrada_vinac_t *entradas;  // Array dinâmico de entradas
+} diretorio_vinac_t;
+
+/* Funções para manipulação do diretório */
+diretorio_vinac_t* criar_diretorio();
+diretorio_vinac_t* carregar_diretorio(const char *arquivo);
+int salvar_diretorio(const char *arquivo, diretorio_vinac_t *dir);
+void liberar_diretorio(diretorio_vinac_t *dir);
+int adicionar_entrada(diretorio_vinac_t *dir, entrada_vinac_t *entrada);
+int remover_entrada(diretorio_vinac_t *dir, const char *nome);
+entrada_vinac_t* encontrar_entrada(diretorio_vinac_t *dir, const char *nome);
+
+/* Funções para operações principais */
+int inserir_membros(const char *arquivo, char **membros, int num_membros, int comprimir);
+int mover_membro(const char *arquivo, const char *membro, const char *alvo);
+// int extrair_membros(const char *arquivo, char **membros, int num_membros);
+// int remover_membros(const char *arquivo, char **membros, int num_membros);
+// int listar_conteudo(const char *arquivo);
+
+/* Funções auxiliares */
+int arquivo_existe(const char *nome);
+uint32_t obter_proximo_uid();
+// void obter_info_arquivo(const char *nome, uint64_t *tamanho, time_t *data_mod);
+
+#endif /* OPERACOES_H */
