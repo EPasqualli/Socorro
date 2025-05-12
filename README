@@ -1,0 +1,50 @@
+# VINAc Archiver - README
+
+## Autoria
+- GRR: 20213400
+- Autora: Elen Pasqualli Gesser
+
+## Conteúdo
+O arquivo de entrega contém os seguintes arquivos e diretórios:
+- vinac.c: Arquivo principal do programa, contendo o ponto de entrada e análise dos argumentos da linha de comando.
+- membros.c, membros.h: Implementam as operações relacionadas aos membros (inserção, extração, remoção, movimentação e listagem).
+- inserir.c, mover.c, remover.c, extrair.c, listar.c: Arquivos que contêm a implementação específica de cada operação com membros, cujas funções são expostas por membros.h.
+- diretorio.c, diretorio.h: Gerenciam a estrutura de diretório e a lista encadeada que armazena os metadados dos membros do archive.
+- lz.c, lz.h: Biblioteca de compressão/descompressão LZ77, de autoria de Marcus Geelnard.
+- makefile: Script de compilação para gerar o executável do projeto.
+- README: Este arquivo, com informações sobre o projeto e instruções de uso.
+
+## Algoritmos e Estruturas de Dados
+### Visão Geral
+O VINAc Archiver é um sistema de arquivamento de arquivos com suporte opcional à compressão LZ77. Ele oferece funcionalidades de inserção, extração, remoção, movimentação e listagem de membros dentro de um arquivo compactado com formato personalizado. Esse formato possui um cabeçalho, dados binários dos membros e um diretório no final.
+
+### Estruturas de Dados
+- Lista Encadeada (entrada_no): Estrutura duplamente encadeada que armazena os metadados (entrada_membro) de cada membro em memória. Permite inserções, remoções e reordenações dinâmicas.
+- Cabeçalho (cabecalho_vinac): Contém assinatura do arquivo ("VINAC"), versão, quantidade de membros, offset do diretório e tamanho do cabeçalho.
+- Diretório (diretorio_vinac): Conjunto que combina o cabeçalho com a lista encadeada, representando o estado completo do arquivo em memória durante as operações.
+
+### Algoritmos
+- Inserção: Lê arquivos externos, aplica compressão (opcionalmente) e insere no final do archive. Substitui membros existentes se necessário.
+- Extração: Recupera os dados de um ou mais membros, descomprime se aplicável, e escreve os arquivos no disco.
+- Remoção: Copia apenas os membros não removidos para um arquivo temporário, atualizando os offsets e o diretório.
+- Movimentação: Reorganiza a lista encadeada de membros em memória e reescreve o archive conforme a nova ordem.
+- Listagem: Percorre a lista encadeada e exibe os metadados de cada membro.
+- Compressão: Utiliza a biblioteca LZ77. Quando a compressão não gera ganho, o dado é armazenado descomprimido.
+
+### Alternativas de Implementação
+- Localização do Diretório: Avaliada a opção de armazenar o diretório no início do arquivo, mas optou-se por colocá-lo no final, simplificando inserções.
+- Bufferização: O tamanho do buffer (TAMANHO_BUFFER = 8192 bytes) foi definido para balancear o uso de memória e desempenho de I/O.
+
+### Desafios e Soluções
+- Gerenciamento de Memória: Foram aplicadas técnicas como memset e free sistemáticos para evitar vazamentos e dados não inicializados.
+- I/O de Arquivos: Leitura e escrita feitas em blocos com verificação de erros para evitar leituras parciais ou arquivos corrompidos.
+- Limite de Compressão: O limite de UINT32_MAX da LZ77 foi tratado desativando a compressão para arquivos maiores que esse valor.
+- Substituição de Membros: Gerenciado via controle da ordem dos membros e atualização da lista encadeada de metadados.
+
+### Bugs Conhecidos
+- Nomes de Arquivos Longos: Arquivos com nomes superiores a 1024 caracteres são rejeitados sem truncamento.
+- Arquivos Grandes: Arquivos maiores que UINT32_MAX não são comprimidos, o que pode surpreender o usuário.
+- Arquivos Temporários: Se o programa for interrompido durante a execução, arquivos temporários podem permanecer no diretório.
+
+## Instruções de Compilação
+Execute make para compilar o projeto e gerar o executável vinac. Use make clean para remover os arquivos objeto (*.o) e o executável.
