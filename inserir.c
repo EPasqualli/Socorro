@@ -15,20 +15,6 @@
 #include "membros.h"
 #include "lz.h"
 
-// Verifica se um membro existe no archive
-int membro_existe(const char *nome, diretorio_vinac *dir) {
-    if (!dir || !nome) return 0;
-
-    entrada_no *atual = dir->inicio;
-    while (atual) {
-        if (strcmp(atual->membros.nome, nome) == 0) {
-            return 1;
-        }
-        atual = atual->prox;
-    }
-    return 0;
-}
-
 // Abre um archive existente ou cria um novo
 diretorio_vinac *abrir_ou_criar_diretorio(const char *arquivo, FILE **fp_out, int usar_offsets_fornecidos) {
     if (!arquivo || !fp_out) {
@@ -109,7 +95,6 @@ uint64_t escrever_dados(FILE *dest, FILE *orig, int comprimir, uint64_t tamanho_
     uint64_t total_escrito = 0;
 
     if (!comprimir || tamanho_orig > UINT32_MAX) {
-        //printf("Compressão desativada, copiando dados diretamente\n"); --> Apenas para teste
         size_t lido;
         while ((lido = fread(buffer_tmp, 1, TAMANHO_BUFFER, orig)) > 0) {
             if (fwrite(buffer_tmp, 1, lido, dest) != lido) {
@@ -121,7 +106,6 @@ uint64_t escrever_dados(FILE *dest, FILE *orig, int comprimir, uint64_t tamanho_
         return total_escrito;
     }
 
-    printf("Tentando compressão LZ\n");
     unsigned char *buffer_entrada = malloc(TAMANHO_BUFFER);
     unsigned char *buffer_comp = malloc(TAMANHO_BUFFER + (TAMANHO_BUFFER / 256) + 1);
     if (!buffer_entrada || !buffer_comp) {
@@ -181,7 +165,7 @@ uint64_t escrever_dados(FILE *dest, FILE *orig, int comprimir, uint64_t tamanho_
     return total_escrito;
 }
 
-// Insere uma entrada de membro em uma ordem especificada ou no final.
+// Insere uma entrada de membro em uma ordem especificada ou no final
 void inserir_entrada_posicao(diretorio_vinac *dir, const entrada_membro *nova_entrada, uint32_t ordem) {
     entrada_no *novo = malloc(sizeof(entrada_no));
     if (!novo) {
@@ -232,16 +216,18 @@ int inserir_membros(const char *arquivo, char **membros, int num_membros, int co
     diretorio_vinac *dir = abrir_ou_criar_diretorio(arquivo, &fp, 0);
     if (!dir || !fp) {
         printf("Erro: Não foi possível abrir ou criar o arquivo '%s'\n", arquivo);
-        // Não fechar fp, pois abrir_ou_criar_diretorio já o gerencia
-        if (dir) liberar_diretorio(dir);
+        if (dir) 
+            liberar_diretorio(dir);
         return 1;
     }
 
-    typedef struct {
+    typedef struct entrada_info {
         entrada_membro *entrada;
         uint32_t ordem;
     } entrada_info;
+
     entrada_info *novas_entradas = malloc(num_membros * sizeof(entrada_info));
+    
     if (!novas_entradas) {
         printf("Erro: Falha ao alocar memória para novas entradas\n");
         fclose(fp);

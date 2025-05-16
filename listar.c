@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <limits.h>
-#include <string.h> // Para memset
+#include <string.h> 
 #include <sys/types.h>
 #include <unistd.h>
 

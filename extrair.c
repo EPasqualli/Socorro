@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <limits.h>
-#include <string.h> // Para memset
+#include <string.h> 
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -130,8 +130,6 @@ int extrair_membros(const char *arquivo, char **nomes, int num_nomes) {
         fprintf(stderr, "Erro: não foi possível carregar o diretório do arquivo '%s'.\n", arquivo);
         return 1;
     }
-
-    listar_conteudo(arquivo); // <-- Apenas para teste
 
     FILE *f = fopen(arquivo, "rb");
     if (!f) {

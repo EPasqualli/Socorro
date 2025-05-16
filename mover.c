@@ -38,6 +38,7 @@ int mover_membro(const char *arquivo, const char *membro, const char *alvo) {
     entrada_no *movido = NULL;
     entrada_no *ant = NULL;
     entrada_no *atual = dir->inicio;
+
     while (atual) {
         if (strcmp(atual->membros.nome, membro) == 0) {
             movido = atual;
@@ -46,11 +47,13 @@ int mover_membro(const char *arquivo, const char *membro, const char *alvo) {
             } else {
                 dir->inicio = atual->prox;
             }
+
             if (atual->prox) {
                 atual->prox->anterior = ant;
             } else {
                 dir->fim = ant;
             }
+
             movido->prox = NULL;
             movido->anterior = NULL;
             break;
@@ -112,6 +115,7 @@ int mover_membro(const char *arquivo, const char *membro, const char *alvo) {
         liberar_diretorio(dir);
         return 1;
     }
+    
     FILE *temp = fdopen(fd, "wb");
     if (!temp) {
         close(fd);

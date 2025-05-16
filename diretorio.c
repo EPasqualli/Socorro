@@ -22,31 +22,18 @@ diretorio_vinac *criar_diretorio() {
         return NULL;
     }
 
-    memset(dir, 0, sizeof(diretorio_vinac));  // <--- ESSENCIAL
+    memset(dir, 0, sizeof(diretorio_vinac));  
 
     dir->cabecalho.assinatura = VINAC_SIGNATURE;
-    dir->cabecalho.versao = 1; // Versão do formato
+    dir->cabecalho.versao = 1; 
     dir->cabecalho.num_membros = 0;
-    dir->cabecalho.offset_dir = 0; // Será atualizado em finalizar_diretorio
+    dir->cabecalho.offset_dir = 0; 
     dir->cabecalho.tam_cabecalho = sizeof(cabecalho_vinac);
 
     dir->inicio = NULL;
     dir->fim = NULL;
 
     return dir;
-}
-
-// Encontra o maior UID no archive
-uint32_t obter_maior_uid(diretorio_vinac *dir) {
-    uint32_t maior = 0;
-    entrada_no *atual = dir->inicio;
-    while (atual) {
-        if (atual->membros.uid > maior) {
-            maior = atual->membros.uid;
-        }
-        atual = atual->prox;
-    }
-    return maior;
 }
 
 // Carrega o diretório de um archive existente em memória
@@ -98,7 +85,7 @@ diretorio_vinac *carregar_diretorio(const char *nome_arquivo) {
 
     for (uint32_t i = 0; i < dir->cabecalho.num_membros; i++) {
         entrada_membro membro;
-        memset(&membro, 0, sizeof(membro));  // 🔒 evita leitura de lixo no padding
+        memset(&membro, 0, sizeof(membro));  
 
         if (fread(&membro, sizeof(entrada_membro), 1, f) != 1) {
             fprintf(stderr, "Erro: Falha ao ler entrada de membro %u em %s: %s\n", i, nome_arquivo, strerror(errno));
@@ -129,19 +116,26 @@ diretorio_vinac *carregar_diretorio(const char *nome_arquivo) {
         }
 
         entrada_no *no = malloc(sizeof(entrada_no));
+
         if (!no) {
             fprintf(stderr, "Erro: Falha ao alocar memória para entrada de membro\n");
             liberar_diretorio(dir);
             fclose(f);
             return NULL;
         }
+
         memset(no, 0, sizeof(entrada_no));
         memcpy(&no->membros, &membro, sizeof(entrada_membro));
 
         no->anterior = dir->fim;
-        if (dir->fim) dir->fim->prox = no;
+        if (dir->fim) {
+            dir->fim->prox = no;
+        }
+
         dir->fim = no;
-        if (!dir->inicio) dir->inicio = no;
+        if (!dir->inicio) {
+            dir->inicio = no;
+        }
     }
 
     fclose(f);
@@ -163,7 +157,8 @@ void liberar_diretorio(diretorio_vinac *dir) {
 
 // Encontra uma entrada de membro por nome
 entrada_no *encontrar_entrada(diretorio_vinac *dir, const char *nome) {
-    if (!dir || !dir->inicio) return NULL;
+    if (!dir || !dir->inicio) 
+        return NULL;
 
     entrada_no *atual = dir->inicio;
     while (atual) {
@@ -192,29 +187,27 @@ void adicionar_entrada(diretorio_vinac *dir, const entrada_membro *nova_entrada)
     } else {
         dir->inicio = novo_no;
     }
+    
     dir->fim = novo_no;
-
     dir->cabecalho.num_membros++;
 }
 
 // Remove uma entrada de membro por nome
 int remover_entrada(diretorio_vinac *dir, const char *nome) {
-    if (!dir || !dir->inicio) return 0;
+    if (!dir || !nome) return 0;
 
     entrada_no *atual = dir->inicio;
     while (atual) {
         if (strcmp(atual->membros.nome, nome) == 0) {
-            if (atual->anterior) {
+            if (atual->anterior)
                 atual->anterior->prox = atual->prox;
-            } else {
+            else
                 dir->inicio = atual->prox;
-            }
 
-            if (atual->prox) {
+            if (atual->prox)
                 atual->prox->anterior = atual->anterior;
-            } else {
+            else
                 dir->fim = atual->anterior;
-            }
 
             free(atual);
             dir->cabecalho.num_membros--;
@@ -222,46 +215,35 @@ int remover_entrada(diretorio_vinac *dir, const char *nome) {
         }
         atual = atual->prox;
     }
+
     return 0;
 }
 
-//  Escreve o diretório e o cabeçalho atualizado no archive
-void finalizar_diretorio(FILE *f, diretorio_vinac *dir) {
-    if (!f || !dir) return;
 
-    uint32_t contador = 0;
+//  Escreve o diretório e o cabeçalho atualizado no archive
+void finalizar_diretorio(FILE *fp, diretorio_vinac *dir) {
+    if (!fp || !dir) 
+        return;
+
+    uint64_t offset_final = sizeof(cabecalho_vinac);
     entrada_no *atual = dir->inicio;
     while (atual) {
-        contador++;
+        uint64_t fim = atual->membros.offset + atual->membros.tamanho_disco;
+        if (fim > offset_final) offset_final = fim;
         atual = atual->prox;
     }
-    dir->cabecalho.num_membros = contador;
 
-    dir->cabecalho.offset_dir = ftell(f);
+    dir->cabecalho.offset_dir = offset_final;
+    fseek(fp, offset_final, SEEK_SET);
+
+    fseek(fp, 0, SEEK_SET);
+    fwrite(&dir->cabecalho, sizeof(cabecalho_vinac), 1, fp);
+
+    fseek(fp, offset_final, SEEK_SET);
 
     atual = dir->inicio;
     while (atual) {
-        entrada_membro m;
-        memset(&m, 0, sizeof(m));  
-        memcpy(&m, &atual->membros, sizeof(entrada_membro));
-
-        if (fwrite(&m, sizeof(m), 1, f) != 1) {
-            fprintf(stderr, "Erro: Falha ao gravar entrada do diretório\n");
-            return;
-        }
+        fwrite(&atual->membros, sizeof(entrada_membro), 1, fp);
         atual = atual->prox;
-    }
-
-    if (fseek(f, 0, SEEK_SET) != 0) {
-        fprintf(stderr, "Erro: Falha ao posicionar no início do arquivo\n");
-        return;
-    }
-
-    cabecalho_vinac cab;
-    memset(&cab, 0, sizeof(cab));  // evita lixo na escrita
-    memcpy(&cab, &dir->cabecalho, sizeof(cabecalho_vinac));
-
-    if (fwrite(&cab, sizeof(cab), 1, f) != 1) {
-        fprintf(stderr, "Erro: Falha ao atualizar cabeçalho\n");
     }
 }
